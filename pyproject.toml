@@ -1,0 +1,23 @@
+[project]
+name = "kkt-checker"
+version = "0.1.0"
+description = "Check the validity of the KKT"
+requires-python = ">=3.12"
+
+dependencies = [
+    "httpx>=0.28.1",
+    "openpyxl>=3.1.5",
+    "pre-commit>=4.2.0",
+    "ruff>=0.11.2",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+extend-select = ["I", "PTH", "B", "A", "N", "PT", "COM", "E", "W", "UP"]
+ignore = ["E501", "COM812"]
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true

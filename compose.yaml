@@ -1,0 +1,28 @@
+services:
+  kkt-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kkt-telegram-bot
+    restart: always
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - TEMP_DIR=/src/temp
+      - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-10}
+      - MAX_CONCURRENT_CHECKS=${MAX_CONCURRENT_CHECKS:-5}
+      - API_DELAY_SECONDS=${API_DELAY_SECONDS:-0.5}
+      - MAX_RETRIES=${MAX_RETRIES:-5}
+      - RETRY_DELAY_SECONDS=${RETRY_DELAY_SECONDS:-10}
+    volumes:
+      - ./temp:/src/temp
+    command: python bot_main.py
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0 if __import__('pathlib').Path('bot.pid').exists() else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  default:
+    name: kkt-bot-network

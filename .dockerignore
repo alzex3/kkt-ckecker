@@ -1,0 +1,41 @@
+# OS files
+**/.DS_Store
+
+# Environment
+.env
+.venv
+.coverage
+env/
+venv/
+coverage/
+
+# IDE settings
+.idea/
+.vscode/
+.claude/
+
+# Python and cache
+**/__pycache__
+.pytest_cache
+.ruff_cache
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Sample assets
+/scripts/sample_assets/
+
+# Docker ignore
+.git
+.gitignore
+tests
+*.md
+.pre-commit-config.yaml
+setup.cfg
+.gitlab-ci.yml

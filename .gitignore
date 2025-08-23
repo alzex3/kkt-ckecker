@@ -24,3 +24,5 @@ trace*
 
 # Configuration and scripts
 /test.xlsx
+/temp/
+/bot.pid

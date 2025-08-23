@@ -1,6 +1,7 @@
+import asyncio
 import logging
 import re
-import time
+from collections.abc import Callable
 from enum import StrEnum
 
 import httpx
@@ -12,15 +13,23 @@ class CheckResultEnum(StrEnum):
     ERROR = "ERROR"
 
 
-class KKTClient:
+def normalize_text(text: str) -> str:
+    """
+    Lowercase the string and remove non-alphanumeric characters.
+    This helps to ignore differences in spaces, punctuation, and case.
+    """
+    return re.sub(r"\W+", "", str(text).lower(), flags=re.UNICODE)
+
+
+class AsyncKKTClient:
     def __init__(self) -> None:
-        self.client = httpx.Client(
+        self.client = httpx.AsyncClient(
             timeout=25,
             base_url="https://kkt-online.nalog.ru",
         )
 
-    def get_models(self) -> dict:
-        resp = self.client.get(
+    async def get_models(self) -> dict:
+        resp = await self.client.get(
             url="lkip.html",
             params={
                 "query": "/kkt/models",
@@ -28,8 +37,8 @@ class KKTClient:
         )
         return resp.json()
 
-    def check_instance(self, model_code: str, factory_number: str) -> dict:
-        resp = self.client.get(
+    async def check_instance(self, model_code: str, factory_number: str) -> dict:
+        resp = await self.client.get(
             url="lkip.html",
             params={
                 "query": "/kkt/model/check",
@@ -39,31 +48,15 @@ class KKTClient:
         )
         return resp.json()
 
-
-class KKTChecker:
-    def __init__(self) -> None:
-        self.client = KKTClient()
-        self.models = self._get_models_mapping()
-
     @staticmethod
-    def _normalize_text(text: str) -> str:
-        """
-        Lowercase the string and remove non-alphanumeric characters.
-        This helps to ignore differences in spaces, punctuation, and case.
-        """
-        return re.sub(r"\W+", "", str(text).lower(), flags=re.UNICODE)
-
-    @staticmethod
-    def _parse_check_result(result: dict[str, str | int]) -> CheckResultEnum:
-        # Сервис временно не доступен, попробуйте позже
+    def parse_check_result(result: dict[str, str | int]) -> CheckResultEnum:
         if result.get("status") != 1:
             raise RuntimeError("Сервис временно не доступен, попробуйте позже.")
 
         if result.get("error"):
-            logging.ERROR(result.get("error"))
+            logging.error(result.get("error"))
             return CheckResultEnum.ERROR
 
-        # Экземпляр ККТ включен в реестр ККТ, не зарегистрирован в налоговых органах
         check_status = result["check_status"]
         if check_status == 1:
             return CheckResultEnum.FAILED
@@ -87,32 +80,63 @@ class KKTChecker:
 
         return CheckResultEnum.SUCCESS
 
-    def _get_models_mapping(self) -> dict[str, str]:
-        models = {}
-        for model in self.client.get_models().get("data", []):
-            normalized_model_name = self._normalize_text(model["name"])
-            models[normalized_model_name] = model["code"]
-        return models
+    async def close(self) -> None:
+        await self.client.aclose()
 
-    def check(self, model: str, factory_number: str, count: int = 0) -> CheckResultEnum:
+
+class AsyncKKTChecker:
+    def __init__(self) -> None:
+        self.client = AsyncKKTClient()
+        self.models: dict[str, str] = {}
+        self._models_loaded = False
+
+    async def _ensure_models_loaded(self) -> None:
+        if not self._models_loaded:
+            await self._load_models()
+            self._models_loaded = True
+
+    async def _load_models(self) -> None:
+        models_data = await self.client.get_models()
+        self.models = {}
+        for model in models_data.get("data", []):
+            normalized_model_name = normalize_text(model["name"])
+            self.models[normalized_model_name] = model["code"]
+
+    async def check(
+        self,
+        model: str,
+        factory_number: str,
+        count: int = 0,
+        progress_callback: Callable[[str], None] | None = None,
+    ) -> CheckResultEnum:
         if count > 5:
             return CheckResultEnum.ERROR
 
-        normalized_model_name = self._normalize_text(model)
-        normalized_factory_number = self._normalize_text(factory_number)
+        await self._ensure_models_loaded()
+
+        normalized_model_name = normalize_text(model)
+        normalized_factory_number = normalize_text(factory_number)
 
         model_code = self.models.get(normalized_model_name)
         if not model_code or not normalized_factory_number:
-            # print(f"Failed! {model}")
             return CheckResultEnum.ERROR
 
-        result = self.client.check_instance(
+        if progress_callback:
+            progress_callback(f"Проверяем {factory_number}...")
+
+        result = await self.client.check_instance(
             model_code=model_code,
             factory_number=normalized_factory_number,
         )
+
         if result.get("error") == "Время ожидания операции истекло":
-            time.sleep(10)
+            if progress_callback:
+                progress_callback(f"Повторная попытка для {factory_number}...")
+            await asyncio.sleep(10)
             count += 1
-            self.check(model, factory_number, count)
+            return await self.check(model, factory_number, count, progress_callback)
         else:
-            return self._parse_check_result(result)
+            return self.client.parse_check_result(result)
+
+    async def close(self) -> None:
+        await self.client.close()

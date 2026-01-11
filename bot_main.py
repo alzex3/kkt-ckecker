@@ -17,17 +17,22 @@ from config import get_config
 def create_pidfile():
     """Create a PID file to prevent multiple instances"""
     pidfile_path = Path("bot.pid")
+    current_pid = os.getpid()
 
     if pidfile_path.exists():
         try:
             with pidfile_path.open() as f:
                 old_pid = int(f.read().strip())
 
-            # Check if process is still running
-            os.kill(old_pid, 0)  # This will raise OSError if process doesn't exist
-            logging.error(f"Bot is already running with PID {old_pid}")
-            logging.error("Stop the existing instance first or delete bot.pid if it's stale")
-            sys.exit(1)
+            # If the old PID is the same as current PID, it's a stale file (e.g., in Docker where PID is always 1)
+            if old_pid == current_pid:
+                pidfile_path.unlink()
+            else:
+                # Check if process is still running
+                os.kill(old_pid, 0)  # This will raise OSError if process doesn't exist
+                logging.error(f"Bot is already running with PID {old_pid}")
+                logging.error("Stop the existing instance first or delete bot.pid if it's stale")
+                sys.exit(1)
 
         except (OSError, ValueError):
             # Process doesn't exist or invalid PID, remove stale pidfile
@@ -35,7 +40,7 @@ def create_pidfile():
 
     # Write current PID
     with pidfile_path.open("w") as f:
-        f.write(str(os.getpid()))
+        f.write(str(current_pid))
 
     def cleanup_pidfile():
         pidfile_path.unlink(missing_ok=True)

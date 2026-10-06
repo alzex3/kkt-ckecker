@@ -1,9 +1,14 @@
 import asyncio
 
 from openpyxl import load_workbook
+# from openpyxl.descriptors.excel import Extension
 from openpyxl.styles import PatternFill
 
 from client import CheckResultEnum, AsyncKKTChecker
+#
+# # Tolerate xlsx files whose pivot-cache extensions omit the `uri` attribute
+# # (Excel/LibreOffice produce these; openpyxl's strict descriptor rejects them).
+# Extension.uri.allow_none = True
 
 
 async def main() -> None:
